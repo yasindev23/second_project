@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email.matches(".*admin.*") ||
+        request.auth.token.email == "admin@iqrashoes.com"
+      );
+    }
+
+    // Public catalogues
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /brands/{brandId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // User profiles & addresses
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+      
+      match /addresses/{addressId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Carts
+    match /carts/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      
+      match /items/{itemId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      // Users can read their own orders; admins can read all
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      // Authenticated users can place orders, or allow guest checkout orders
+      allow create: if true;
+      // Only admins can update status or cancel orders
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.orderStatus == 'cancelled');
+      allow delete: if isAdmin();
+    }
+  }
+}
